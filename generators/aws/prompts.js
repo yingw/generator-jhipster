@@ -1,7 +1,7 @@
 /**
- * Copyright 2013-2017 the original author or authors from the JHipster project.
+ * Copyright 2013-2018 the original author or authors from the JHipster project.
  *
- * This file is part of the JHipster project, see http://www.jhipster.tech/
+ * This file is part of the JHipster project, see https://www.jhipster.tech/
  * for more information.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -69,7 +69,7 @@ function prompting() {
             message: 'Database password:',
             validate: (input) => {
                 if (input === '') return 'Please provide a password';
-                else if (input.length < 8) return 'Password must contain minimum 8 chars';
+                if (input.length < 8) return 'Password must contain minimum 8 chars';
                 return true;
             }
         },
@@ -96,7 +96,7 @@ function prompting() {
             type: 'list',
             name: 'awsRegion',
             message: 'On which region do you want to deploy?',
-            choices: ['ap-northeast-1', 'ap-southeast-1', 'ap-southeast-2', 'eu-central-1', 'eu-west-1', 'sa-east-1',
+            choices: ['ap-northeast-1', 'ap-southeast-1', 'ap-southeast-2', 'eu-central-1', 'eu-west-1', 'eu-west-2', 'sa-east-1',
                 'us-east-1', 'us-west-1', 'us-west-2'],
             default: 3
         }];

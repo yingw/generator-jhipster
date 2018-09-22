@@ -1,6 +1,5 @@
 /* global describe, beforeEach, it */
 
-
 const path = require('path');
 const assert = require('yeoman-assert');
 const helpers = require('yeoman-test');
@@ -8,67 +7,77 @@ const fse = require('fs-extra');
 
 const expectedFiles = {
     eurekaregistry: [
-        'registry/jhipster-registry.yml',
-        'registry/application-configmap.yml'
+        './registry/jhipster-registry.yml',
+        './registry/application-configmap.yml'
     ],
     consulregistry: [
-        'registry/consul.yml',
-        'registry/consul-config-loader.yml',
-        'registry/application-configmap.yml'
+        './registry/consul.yml',
+        './registry/consul-config-loader.yml',
+        './registry/application-configmap.yml'
     ],
     jhgate: [
-        'jhgate/jhgate-deployment.yml',
-        'jhgate/jhgate-mysql.yml',
-        'jhgate/jhgate-service.yml'
+        './jhgate/jhgate-deployment.yml',
+        './jhgate/jhgate-mysql.yml',
+        './jhgate/jhgate-service.yml'
     ],
     jhgateingress: [
-        'jhgate/jhgate-deployment.yml',
-        'jhgate/jhgate-mysql.yml',
-        'jhgate/jhgate-service.yml',
-        'jhgate/jhgate-ingress.yml'
+        './jhgate/jhgate-deployment.yml',
+        './jhgate/jhgate-mysql.yml',
+        './jhgate/jhgate-service.yml',
+        './jhgate/jhgate-ingress.yml'
     ],
     customnamespace: [
-        'namespace.yml'
+        './namespace.yml'
     ],
     jhconsole: [
-        'console/jhipster-console.yml',
-        'console/jhipster-elasticsearch.yml',
-        'console/jhipster-logstash.yml',
-        'console/logstash-config.yml',
+        './console/jhipster-console.yml',
+        './console/jhipster-elasticsearch.yml',
+        './console/jhipster-logstash.yml',
+        './console/jhipster-dashboard-console.yml',
+        './console/jhipster-zipkin.yml'
     ],
     msmysql: [
-        'msmysql/msmysql-deployment.yml',
-        'msmysql/msmysql-mysql.yml',
-        'msmysql/msmysql-service.yml'
+        './msmysql/msmysql-deployment.yml',
+        './msmysql/msmysql-mysql.yml',
+        './msmysql/msmysql-service.yml'
     ],
     mspsql: [
-        'mspsql/mspsql-deployment.yml',
-        'mspsql/mspsql-postgresql.yml',
-        'mspsql/mspsql-service.yml',
-        'mspsql/mspsql-elasticsearch.yml'
+        './mspsql/mspsql-deployment.yml',
+        './mspsql/mspsql-postgresql.yml',
+        './mspsql/mspsql-service.yml',
+        './mspsql/mspsql-elasticsearch.yml'
     ],
     msmongodb: [
-        'msmongodb/msmongodb-deployment.yml',
-        'msmongodb/msmongodb-mongodb.yml',
-        'msmongodb/msmongodb-service.yml'
+        './msmongodb/msmongodb-deployment.yml',
+        './msmongodb/msmongodb-mongodb.yml',
+        './msmongodb/msmongodb-service.yml'
     ],
     msmariadb: [
-        'msmariadb/msmariadb-deployment.yml',
-        'msmariadb/msmariadb-mariadb.yml',
-        'msmariadb/msmariadb-service.yml'
+        './msmariadb/msmariadb-deployment.yml',
+        './msmariadb/msmariadb-mariadb.yml',
+        './msmariadb/msmariadb-service.yml'
     ],
     monolith: [
-        'samplemysql/samplemysql-deployment.yml',
-        'samplemysql/samplemysql-mysql.yml',
-        'samplemysql/samplemysql-service.yml',
-        'samplemysql/samplemysql-elasticsearch.yml'
+        './samplemysql/samplemysql-deployment.yml',
+        './samplemysql/samplemysql-mysql.yml',
+        './samplemysql/samplemysql-service.yml',
+        './samplemysql/samplemysql-elasticsearch.yml'
     ],
     kafka: [
-        'samplekafka/samplekafka-deployment.yml',
-        'samplekafka/samplekafka-mysql.yml',
-        'samplekafka/samplekafka-service.yml',
-        'samplekafka/samplekafka-kafka.yml'
+        './samplekafka/samplekafka-deployment.yml',
+        './samplekafka/samplekafka-mysql.yml',
+        './samplekafka/samplekafka-service.yml',
+        './messagebroker/kafka.yml'
     ],
+    prometheusmonit: [
+        './monitoring/jhipster-prometheus-crd.yml',
+        './monitoring/jhipster-prometheus-cr.yml',
+        './monitoring/jhipster-grafana.yml',
+        './monitoring/jhipster-grafana-dashboard.yml'
+    ],
+    applyScript: [
+        './kubectl-apply.sh'
+    ]
 };
 
 describe('JHipster Kubernetes Sub Generator', () => {
@@ -91,18 +100,22 @@ describe('JHipster Kubernetes Sub Generator', () => {
                     dockerPushCommand: 'docker push',
                     kubernetesNamespace: 'jhipsternamespace',
                     jhipsterConsole: false,
-                    kubernetesServiceType: 'LoadBalancer'
+                    kubernetesServiceType: 'LoadBalancer',
+                    clusteredDbApps: []
                 })
                 .on('end', done);
         });
         it('creates expected registry files and content', () => {
             assert.file(expectedFiles.eurekaregistry);
-            assert.fileContent('registry/jhipster-registry.yml', /# base64 encoded "meetup"/);
+            assert.fileContent('./registry/jhipster-registry.yml', /# base64 encoded "meetup"/);
         });
         it('creates expected gateway files and content', () => {
             assert.file(expectedFiles.jhgate);
-            assert.fileContent('jhgate/jhgate-deployment.yml', /image: jhipsterrepository\/jhgate/);
-            assert.fileContent('jhgate/jhgate-deployment.yml', /jhipsternamespace.svc.cluster/);
+            assert.fileContent('./jhgate/jhgate-deployment.yml', /image: jhipsterrepository\/jhgate/);
+            assert.fileContent('./jhgate/jhgate-deployment.yml', /jhipsternamespace.svc.cluster/);
+        });
+        it('create the apply script', () => {
+            assert.file(expectedFiles.applyScript);
         });
     });
 
@@ -125,8 +138,8 @@ describe('JHipster Kubernetes Sub Generator', () => {
                     dockerPushCommand: 'docker push',
                     kubernetesNamespace: 'default',
                     jhipsterConsole: false,
-                    kubernetesServiceType: 'LoadBalancer'
-
+                    kubernetesServiceType: 'LoadBalancer',
+                    clusteredDbApps: []
                 })
                 .on('end', done);
         });
@@ -139,9 +152,12 @@ describe('JHipster Kubernetes Sub Generator', () => {
         it('creates expected mysql files', () => {
             assert.file(expectedFiles.msmysql);
         });
+        it('create the apply script', () => {
+            assert.file(expectedFiles.applyScript);
+        });
     });
 
-    describe('mysql microservice with custom namespace and jhipster-console', () => {
+    describe('mysql microservice with custom namespace and jhipster-console (with zipkin)', () => {
         beforeEach((done) => {
             helpers
                 .run(require.resolve('../generators/kubernetes'))
@@ -158,9 +174,10 @@ describe('JHipster Kubernetes Sub Generator', () => {
                     dockerRepositoryName: 'jhipster',
                     dockerPushCommand: 'docker push',
                     kubernetesNamespace: 'mynamespace',
+                    monitoring: 'elk',
                     jhipsterConsole: true,
-                    kubernetesServiceType: 'LoadBalancer'
-
+                    kubernetesServiceType: 'LoadBalancer',
+                    clusteredDbApps: []
                 })
                 .on('end', done);
         });
@@ -175,6 +192,9 @@ describe('JHipster Kubernetes Sub Generator', () => {
         });
         it('creates expected namespace file', () => {
             assert.file(expectedFiles.customnamespace);
+        });
+        it('create the apply script', () => {
+            assert.file(expectedFiles.applyScript);
         });
     });
 
@@ -195,10 +215,9 @@ describe('JHipster Kubernetes Sub Generator', () => {
                     dockerRepositoryName: 'jhipster',
                     dockerPushCommand: 'docker push',
                     kubernetesNamespace: 'default',
-                    jhipsterConsole: false,
                     kubernetesServiceType: 'Ingress',
-                    ingressDomain: 'example.com'
-
+                    ingressDomain: 'example.com',
+                    clusteredDbApps: []
                 })
                 .on('end', done);
         });
@@ -210,6 +229,9 @@ describe('JHipster Kubernetes Sub Generator', () => {
         });
         it('creates expected ingress files', () => {
             assert.file(expectedFiles.jhgateingress);
+        });
+        it('create the apply script', () => {
+            assert.file(expectedFiles.applyScript);
         });
     });
 
@@ -232,8 +254,8 @@ describe('JHipster Kubernetes Sub Generator', () => {
                     dockerPushCommand: 'docker push',
                     kubernetesNamespace: 'default',
                     jhipsterConsole: false,
-                    kubernetesServiceType: 'LoadBalancer'
-
+                    kubernetesServiceType: 'LoadBalancer',
+                    clusteredDbApps: []
                 })
                 .on('end', done);
         });
@@ -248,6 +270,9 @@ describe('JHipster Kubernetes Sub Generator', () => {
         });
         it('creates expected psql files', () => {
             assert.file(expectedFiles.mspsql);
+        });
+        it('create the apply script', () => {
+            assert.file(expectedFiles.applyScript);
         });
     });
 
@@ -273,8 +298,8 @@ describe('JHipster Kubernetes Sub Generator', () => {
                     dockerPushCommand: 'docker push',
                     kubernetesNamespace: 'default',
                     jhipsterConsole: false,
-                    kubernetesServiceType: 'LoadBalancer'
-
+                    kubernetesServiceType: 'LoadBalancer',
+                    clusteredDbApps: []
                 })
                 .on('end', done);
         });
@@ -296,6 +321,9 @@ describe('JHipster Kubernetes Sub Generator', () => {
         it('creates expected mariadb files', () => {
             assert.file(expectedFiles.msmariadb);
         });
+        it('create the apply script', () => {
+            assert.file(expectedFiles.applyScript);
+        });
     });
 
     describe('monolith application', () => {
@@ -316,8 +344,8 @@ describe('JHipster Kubernetes Sub Generator', () => {
                     dockerPushCommand: 'docker push',
                     kubernetesNamespace: 'default',
                     jhipsterConsole: false,
-                    kubernetesServiceType: 'LoadBalancer'
-
+                    kubernetesServiceType: 'LoadBalancer',
+                    clusteredDbApps: []
                 })
                 .on('end', done);
         });
@@ -326,6 +354,9 @@ describe('JHipster Kubernetes Sub Generator', () => {
         });
         it('creates expected default files', () => {
             assert.file(expectedFiles.monolith);
+        });
+        it('create the apply script', () => {
+            assert.file(expectedFiles.applyScript);
         });
     });
 
@@ -347,8 +378,8 @@ describe('JHipster Kubernetes Sub Generator', () => {
                     dockerPushCommand: 'docker push',
                     kubernetesNamespace: 'default',
                     jhipsterConsole: false,
-                    kubernetesServiceType: 'LoadBalancer'
-
+                    kubernetesServiceType: 'LoadBalancer',
+                    clusteredDbApps: []
                 })
                 .on('end', done);
         });
@@ -357,6 +388,49 @@ describe('JHipster Kubernetes Sub Generator', () => {
         });
         it('creates expected default files', () => {
             assert.file(expectedFiles.kafka);
+        });
+        it('create the apply script', () => {
+            assert.file(expectedFiles.applyScript);
+        });
+    });
+
+    describe('mysql microservice with custom namespace and jhipster prometheus monitoring', () => {
+        beforeEach((done) => {
+            helpers
+                .run(require.resolve('../generators/kubernetes'))
+                .inTmpDir((dir) => {
+                    fse.copySync(path.join(__dirname, './templates/compose/'), dir);
+                })
+                .withOptions({ skipChecks: true })
+                .withPrompts({
+                    composeApplicationType: 'microservice',
+                    directoryPath: './',
+                    chosenApps: [
+                        '02-mysql'
+                    ],
+                    dockerRepositoryName: 'jhipster',
+                    dockerPushCommand: 'docker push',
+                    kubernetesNamespace: 'mynamespace',
+                    monitoring: 'prometheus',
+                    kubernetesServiceType: 'LoadBalancer'
+
+                })
+                .on('end', done);
+        });
+        it('creates expected registry files', () => {
+            assert.file(expectedFiles.eurekaregistry);
+        });
+        it('creates expected mysql files', () => {
+            assert.file(expectedFiles.msmysql);
+        });
+        it('creates expected prometheus files', () => {
+            assert.file(expectedFiles.prometheusmonit);
+        });
+        it('creates expected namespace file', () => {
+            assert.file(expectedFiles.customnamespace);
+        });
+        it('create the apply script', () => {
+            assert.file(expectedFiles.applyScript);
         });
     });
 });

@@ -1,7 +1,7 @@
 /**
- * Copyright 2013-2017 the original author or authors from the JHipster project.
+ * Copyright 2013-2018 the original author or authors from the JHipster project.
  *
- * This file is part of the JHipster project, see http://www.jhipster.tech/
+ * This file is part of the JHipster project, see https://www.jhipster.tech/
  * for more information.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -22,6 +22,7 @@ const chalk = require('chalk');
 const glob = require('glob');
 const prompts = require('./prompts');
 const BaseGenerator = require('../generator-base');
+const statistics = require('../statistics');
 
 const constants = require('../generator-constants');
 
@@ -35,7 +36,8 @@ module.exports = class extends BaseGenerator {
         this.buildTool = this.config.get('buildTool');
         this.packageName = this.config.get('packageName');
         this.packageFolder = this.config.get('packageFolder');
-        this.hibernateCache = this.config.get('hibernateCache');
+        this.cacheProvider = this.config.get('cacheProvider') || this.config.get('hibernateCache') || 'no';
+        this.enableHibernateCache = this.config.get('enableHibernateCache') || (this.config.get('hibernateCache') !== undefined && this.config.get('hibernateCache') !== 'no');
         this.databaseType = this.config.get('databaseType');
         this.devDatabaseType = this.config.get('devDatabaseType');
         this.prodDatabaseType = this.config.get('prodDatabaseType');
@@ -49,15 +51,24 @@ module.exports = class extends BaseGenerator {
     get configuring() {
         return {
             insight() {
-                const insight = this.insight();
-                insight.trackWithEvent('generator', 'cloudfoundry');
+                statistics.sendSubGenEvent('generator', 'cloudfoundry');
             },
 
             copyCloudFoundryFiles() {
                 if (this.abort) return;
                 this.log(chalk.bold('\nCreating Cloud Foundry deployment files'));
-                this.template('_manifest.yml', 'deploy/cloudfoundry/manifest.yml');
-                this.template('_application-cloudfoundry.yml', `${constants.SERVER_MAIN_RES_DIR}config/application-cloudfoundry.yml`);
+                this.template('manifest.yml.ejs', 'deploy/cloudfoundry/manifest.yml');
+                this.template('application-cloudfoundry.yml.ejs', `${constants.SERVER_MAIN_RES_DIR}config/application-cloudfoundry.yml`);
+            },
+
+            addCloudFoundryDependencies() {
+                if (this.buildTool === 'maven') {
+                    this.addMavenDependency('org.springframework.cloud', 'spring-cloud-localconfig-connector');
+                    this.addMavenDependency('org.springframework.cloud', 'spring-cloud-cloudfoundry-connector');
+                } else if (this.buildTool === 'gradle') {
+                    this.addGradleDependency('compile', 'org.springframework.cloud', 'spring-cloud-localconfig-connector');
+                    this.addGradleDependency('compile', 'org.springframework.cloud', 'spring-cloud-cloudfoundry-connector');
+                }
             },
 
             checkInstallation() {
@@ -66,8 +77,8 @@ module.exports = class extends BaseGenerator {
 
                 exec('cf -v', (err) => {
                     if (err) {
-                        this.log.error('cloudfoundry\'s cf command line interface is not available. ' +
-                            'You can install it via https://github.com/cloudfoundry/cli/releases');
+                        this.log.error('cloudfoundry\'s cf command line interface is not available. '
+                            + 'You can install it via https://github.com/cloudfoundry/cli/releases');
                         this.abort = true;
                     }
                     done();
@@ -178,7 +189,6 @@ module.exports = class extends BaseGenerator {
 
                 exec(`cf restart ${this.cloudfoundryDeployedName}`, (err, stdout, stderr) => {
                     this.log(chalk.green('\nYour app should now be live'));
-                    this.log(chalk.yellow(`After application modification, re-deploy it with\n\t${chalk.bold('gulp deploycloudfoundry')}`));
                 });
             }
         };

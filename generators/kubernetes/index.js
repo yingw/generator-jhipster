@@ -1,7 +1,7 @@
 /**
- * Copyright 2013-2017 the original author or authors from the JHipster project.
+ * Copyright 2013-2018 the original author or authors from the JHipster project.
  *
- * This file is part of the JHipster project, see http://www.jhipster.tech/
+ * This file is part of the JHipster project, see https://www.jhipster.tech/
  * for more information.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -18,10 +18,12 @@
  */
 const chalk = require('chalk');
 const shelljs = require('shelljs');
+const fs = require('fs');
 const prompts = require('./prompts');
 const writeFiles = require('./files').writeFiles;
 const BaseGenerator = require('../generator-base');
 const docker = require('../docker-base');
+const statistics = require('../statistics');
 
 /* Constants used throughout */
 const constants = require('../generator-constants');
@@ -29,7 +31,12 @@ const constants = require('../generator-constants');
 module.exports = class extends BaseGenerator {
     constructor(args, opts) {
         super(args, opts);
-
+        // This adds support for a `--from-cli` flag
+        this.option('from-cli', {
+            desc: 'Indicates the command is run from JHipster CLI',
+            type: Boolean,
+            defaults: false
+        });
         // This adds support for a `--skip-checks` flag
         this.option('skip-checks', {
             desc: 'Check the status of the required tools',
@@ -42,6 +49,12 @@ module.exports = class extends BaseGenerator {
 
     get initializing() {
         return {
+            validateFromCli() {
+                if (!this.options['from-cli']) {
+                    this.warning(`Deprecated: JHipster seems to be invoked using Yeoman command. Please use the JHipster CLI. Run ${chalk.red('jhipster <command>')} instead of ${chalk.red('yo jhipster:<command>')}`);
+                }
+            },
+
             sayHello() {
                 this.log(chalk.white(`${chalk.bold('⎈')} Welcome to the JHipster Kubernetes Generator ${chalk.bold('⎈')}`));
                 this.log(chalk.white(`Files will be generated in folder: ${chalk.yellow(this.destinationRoot())}`));
@@ -55,8 +68,8 @@ module.exports = class extends BaseGenerator {
 
                 shelljs.exec('kubectl version', { silent: true }, (code, stdout, stderr) => {
                     if (stderr) {
-                        this.log(`${chalk.yellow.bold('WARNING!')} kubectl 1.2 or later is not installed on your computer.\n` +
-                          'Make sure you have Kubernetes installed. Read http://kubernetes.io/docs/getting-started-guides/binary_release/\n');
+                        this.log(`${chalk.yellow.bold('WARNING!')} kubectl 1.2 or later is not installed on your computer.\n`
+                          + 'Make sure you have Kubernetes installed. Read http://kubernetes.io/docs/getting-started-guides/binary_release/\n');
                     }
                     done();
                 });
@@ -72,15 +85,19 @@ module.exports = class extends BaseGenerator {
                 this.dockerRepositoryName = this.config.get('dockerRepositoryName');
                 this.dockerPushCommand = this.config.get('dockerPushCommand');
                 this.kubernetesNamespace = this.config.get('kubernetesNamespace');
-                this.jhipsterConsole = this.config.get('jhipsterConsole');
-                this.prometheusOperator = this.config.get('prometheusOperator');
+                this.monitoring = this.config.get('monitoring');
                 this.kubernetesServiceType = this.config.get('kubernetesServiceType');
                 this.ingressDomain = this.config.get('ingressDomain');
+                this.useKafka = false;
+                this.istio = this.config.get('istio');
+                this.istioRoute = this.config.get('istioRoute');
 
                 this.DOCKER_JHIPSTER_REGISTRY = constants.DOCKER_JHIPSTER_REGISTRY;
                 this.DOCKER_JHIPSTER_ELASTICSEARCH = constants.DOCKER_JHIPSTER_ELASTICSEARCH;
                 this.DOCKER_JHIPSTER_LOGSTASH = constants.DOCKER_JHIPSTER_LOGSTASH;
                 this.DOCKER_JHIPSTER_CONSOLE = constants.DOCKER_JHIPSTER_CONSOLE;
+                this.DOCKER_JHIPSTER_IMPORT_DASHBOARDS = constants.DOCKER_JHIPSTER_IMPORT_DASHBOARDS;
+                this.DOCKER_JHIPSTER_ZIPKIN = constants.DOCKER_JHIPSTER_ZIPKIN;
                 this.DOCKER_TRAEFIK = constants.DOCKER_TRAEFIK;
                 this.DOCKER_CONSUL = constants.DOCKER_CONSUL;
                 this.DOCKER_CONSUL_CONFIG_LOADER = constants.DOCKER_CONSUL_CONFIG_LOADER;
@@ -89,9 +106,14 @@ module.exports = class extends BaseGenerator {
                 this.DOCKER_POSTGRESQL = constants.DOCKER_POSTGRESQL;
                 this.DOCKER_ORACLE = constants.DOCKER_ORACLE;
                 this.DOCKER_MONGODB = constants.DOCKER_MONGODB;
+                this.DOCKER_COUCHBASE = constants.DOCKER_COUCHBASE;
+                this.DOCKER_MEMCACHED = constants.DOCKER_MEMCACHED;
                 this.DOCKER_ELASTICSEARCH = constants.DOCKER_ELASTICSEARCH;
                 this.DOCKER_KAFKA = constants.DOCKER_KAFKA;
                 this.DOCKER_ZOOKEEPER = constants.DOCKER_ZOOKEEPER;
+                this.DOCKER_PROMETHEUS_OPERATOR = constants.DOCKER_PROMETHEUS_OPERATOR;
+                this.DOCKER_GRAFANA_WATCHER = constants.DOCKER_GRAFANA_WATCHER;
+                this.DOCKER_GRAFANA = constants.DOCKER_GRAFANA;
 
                 if (this.defaultAppsFolders !== undefined) {
                     this.log('\nFound .yo-rc.json config file...');
@@ -128,15 +150,15 @@ module.exports = class extends BaseGenerator {
             askForApplicationType: prompts.askForApplicationType,
             askForPath: prompts.askForPath,
             askForApps: prompts.askForApps,
-            // cluster for mongodb: it can be done later
-            // askForClustersMode: prompts.askForClustersMode,
+            askForMonitoring: prompts.askForMonitoring,
+            askForClustersMode: prompts.askForClustersMode,
             askForServiceDiscovery: prompts.askForServiceDiscovery,
             askForAdminPassword: prompts.askForAdminPassword,
             askForKubernetesNamespace: prompts.askForKubernetesNamespace,
             askForDockerRepositoryName: prompts.askForDockerRepositoryName,
             askForDockerPushCommand: prompts.askForDockerPushCommand,
-            askForJhipsterConsole: prompts.askForJhipsterConsole,
-            askForPrometheusOperator: prompts.askForPrometheusOperator,
+            askForIstioSupport: prompts.askForIstioSupport,
+            askForIstioRouteFiles: prompts.askForIstioRouteFiles,
             askForKubernetesServiceType: prompts.askForKubernetesServiceType,
             askForIngressDomain: prompts.askForIngressDomain
         };
@@ -145,8 +167,7 @@ module.exports = class extends BaseGenerator {
     get configuring() {
         return {
             insight() {
-                const insight = this.insight();
-                insight.trackWithEvent('generator', 'kubernetes');
+                statistics.sendSubGenEvent('generator', 'kubernetes');
             },
 
             checkImages: docker.checkImages,
@@ -154,17 +175,31 @@ module.exports = class extends BaseGenerator {
             configureImageNames: docker.configureImageNames,
             setAppsFolderPaths: docker.setAppsFolderPaths,
 
+            setPostPromptProp() {
+                this.appConfigs.forEach((element) => {
+                    element.clusteredDb ? element.dbPeerCount = 3 : element.dbPeerCount = 1;
+                    if (element.messageBroker === 'kafka') {
+                        this.useKafka = true;
+                    }
+                });
+            },
+
             saveConfig() {
-                this.config.set('appsFolders', this.appsFolders);
-                this.config.set('directoryPath', this.directoryPath);
-                this.config.set('clusteredDbApps', this.clusteredDbApps);
-                this.config.set('serviceDiscoveryType', this.serviceDiscoveryType);
-                this.config.set('jwtSecretKey', this.jwtSecretKey);
-                this.config.set('dockerRepositoryName', this.dockerRepositoryName);
-                this.config.set('dockerPushCommand', this.dockerPushCommand);
-                this.config.set('kubernetesNamespace', this.kubernetesNamespace);
-                this.config.set('kubernetesServiceType', this.kubernetesServiceType);
-                this.config.set('ingressDomain', this.ingressDomain);
+                this.config.set({
+                    appsFolders: this.appsFolders,
+                    directoryPath: this.directoryPath,
+                    clusteredDbApps: this.clusteredDbApps,
+                    serviceDiscoveryType: this.serviceDiscoveryType,
+                    jwtSecretKey: this.jwtSecretKey,
+                    dockerRepositoryName: this.dockerRepositoryName,
+                    dockerPushCommand: this.dockerPushCommand,
+                    kubernetesNamespace: this.kubernetesNamespace,
+                    kubernetesServiceType: this.kubernetesServiceType,
+                    ingressDomain: this.ingressDomain,
+                    monitoring: this.monitoring,
+                    istio: this.istio,
+                    istioRoute: this.istioRoute
+                });
             }
         };
     }
@@ -191,23 +226,8 @@ module.exports = class extends BaseGenerator {
             this.log(`  ${chalk.cyan(`${this.dockerPushCommand} ${targetImageName}`)}`);
         }
 
-        this.log('\nYou can deploy all your apps by running: ');
-        if (this.kubernetesNamespace !== 'default') {
-            this.log(`  ${chalk.cyan('kubectl apply -f namespace.yml')}`);
-        }
-        if (this.jhipsterConsole) {
-            this.log(`  ${chalk.cyan('kubectl apply -f console')}`);
-        }
-        if (this.prometheusOperator) {
-            this.log(`  ${chalk.cyan('kubectl apply -f prometheus-tpr.yml')}`);
-        }
-        if (this.gatewayNb >= 1 || this.microserviceNb >= 1) {
-            this.log(`  ${chalk.cyan('kubectl apply -f registry')}`);
-        }
-        for (let i = 0; i < this.appsFolders.length; i++) {
-            this.log(`  ${chalk.cyan(`kubectl apply -f ${this.appConfigs[i].baseName.toLowerCase()}`)}`);
-        }
-
+        this.log('\nYou can deploy all your apps by running the following script:');
+        this.log(`  ${chalk.cyan('./kubectl-apply.sh')}`);
         if (this.gatewayNb + this.monolithicNb >= 1) {
             const namespaceSuffix = this.kubernetesNamespace === 'default' ? '' : ` -n ${this.kubernetesNamespace}`;
             this.log('\nUse these commands to find your application\'s IP addresses:');
@@ -217,6 +237,12 @@ module.exports = class extends BaseGenerator {
                 }
             }
             this.log();
+        }
+        // Make the apply script executable
+        try {
+            fs.chmodSync('kubectl-apply.sh', '755');
+        } catch (err) {
+            this.log(`${chalk.yellow.bold('WARNING!')}Failed to make 'kubectl-apply.sh' executable, you may need to run 'chmod +x kubectl-apply.sh'`);
         }
     }
 };

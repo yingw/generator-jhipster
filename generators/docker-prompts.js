@@ -1,7 +1,7 @@
 /**
- * Copyright 2013-2017 the original author or authors from the JHipster project.
+ * Copyright 2013-2018 the original author or authors from the JHipster project.
  *
- * This file is part of the JHipster project, see http://www.jhipster.tech/
+ * This file is part of the JHipster project, see https://www.jhipster.tech/
  * for more information.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -30,9 +30,13 @@ module.exports = {
     askForServiceDiscovery,
     askForAdminPassword,
     askForDockerRepositoryName,
-    askForDockerPushCommand
+    askForDockerPushCommand,
+    loadConfigs
 };
 
+/**
+ * Ask For Application Type
+ */
 function askForApplicationType() {
     const done = this.async();
 
@@ -59,6 +63,9 @@ function askForApplicationType() {
     });
 }
 
+/**
+ * Ask For Gateway Type
+ */
 function askForGatewayType() {
     if (this.regenerate) return;
     if (this.composeApplicationType !== 'microservice') return;
@@ -87,6 +94,9 @@ function askForGatewayType() {
     });
 }
 
+/**
+ * Ask For Path
+ */
 function askForPath() {
     if (this.regenerate) return;
 
@@ -109,7 +119,7 @@ function askForPath() {
                 const appsFolders = getAppFolders.call(this, input, composeApplicationType);
 
                 if (appsFolders.length === 0) {
-                    return `No microservice or gateway found in ${path}`;
+                    return composeApplicationType === 'monolith' ? `No monolith found in ${path}` : `No microservice or gateway found in ${path}`;
                 }
                 return true;
             }
@@ -119,6 +129,11 @@ function askForPath() {
 
     this.prompt(prompts).then((props) => {
         this.directoryPath = props.directoryPath;
+        // Patch the path if there is no trailing "/"
+        if (!this.directoryPath.endsWith('/')) {
+            this.log(chalk.yellow(`The path "${this.directoryPath}" does not end with a trailing "/", adding it anyway.`));
+            this.directoryPath += '/';
+        }
 
         this.appsFolders = getAppFolders.call(this, this.directoryPath, composeApplicationType);
 
@@ -135,6 +150,10 @@ function askForPath() {
     });
 }
 
+
+/**
+ * Ask For Apps
+ */
 function askForApps() {
     if (this.regenerate) return;
 
@@ -153,51 +172,62 @@ function askForApps() {
     this.prompt(prompts).then((props) => {
         this.appsFolders = props.chosenApps;
 
-        this.appConfigs = [];
-        this.gatewayNb = 0;
-        this.monolithicNb = 0;
-        this.microserviceNb = 0;
-
-        // Loading configs
-        this.appsFolders.forEach((appFolder) => {
-            const path = this.destinationPath(`${this.directoryPath + appFolder}/.yo-rc.json`);
-            const fileData = this.fs.readJSON(path);
-            const config = fileData['generator-jhipster'];
-
-            if (config.applicationType === 'monolith') {
-                this.monolithicNb++;
-            } else if (config.applicationType === 'gateway') {
-                this.gatewayNb++;
-            } else if (config.applicationType === 'microservice') {
-                this.microserviceNb++;
-            }
-
-            this.portsToBind = this.monolithicNb + this.gatewayNb;
-            this.appConfigs.push(config);
-        });
-
+        loadConfigs.call(this);
         done();
     });
 }
 
+/*
+ * Load config from this.appFolders
+ * TODO: Extracted from AdForApps. Move into utils?
+ */
+function loadConfigs() {
+    this.appConfigs = [];
+    this.gatewayNb = 0;
+    this.monolithicNb = 0;
+    this.microserviceNb = 0;
+
+    // Loading configs
+    this.appsFolders.forEach((appFolder) => {
+        const path = this.destinationPath(`${this.directoryPath + appFolder}/.yo-rc.json`);
+        const fileData = this.fs.readJSON(path);
+        const config = fileData['generator-jhipster'];
+
+        if (config.applicationType === 'monolith') {
+            this.monolithicNb++;
+        } else if (config.applicationType === 'gateway') {
+            this.gatewayNb++;
+        } else if (config.applicationType === 'microservice') {
+            this.microserviceNb++;
+        }
+
+        this.portsToBind = this.monolithicNb + this.gatewayNb;
+        config.appFolder = appFolder;
+        this.appConfigs.push(config);
+    });
+}
+
+/**
+ * Ask For Clusters Mode
+ */
 function askForClustersMode() {
     if (this.regenerate) return;
 
-    const mongoApps = [];
+    const clusteredDbApps = [];
     this.appConfigs.forEach((appConfig, index) => {
-        if (appConfig.prodDatabaseType === 'mongodb') {
-            mongoApps.push(this.appsFolders[index]);
+        if (appConfig.prodDatabaseType === 'mongodb' || appConfig.prodDatabaseType === 'couchbase') {
+            clusteredDbApps.push(this.appsFolders[index]);
         }
     });
-    if (mongoApps.length === 0) return;
+    if (clusteredDbApps.length === 0) return;
 
     const done = this.async();
 
     const prompts = [{
         type: 'checkbox',
         name: 'clusteredDbApps',
-        message: 'Which applications do you want to use with clustered databases (only available with MongoDB)?',
-        choices: mongoApps,
+        message: 'Which applications do you want to use with clustered databases (only available with MongoDB and Couchbase)?',
+        choices: clusteredDbApps,
         default: this.clusteredDbApps
     }];
 
@@ -213,6 +243,9 @@ function askForClustersMode() {
     });
 }
 
+/**
+ * Ask For Monitoring
+ */
 function askForMonitoring() {
     if (this.regenerate) return;
 
@@ -236,7 +269,7 @@ function askForMonitoring() {
                 name: 'Yes, for metrics only with Prometheus (only compatible with JHipster >= v3.12)'
             }
         ],
-        default: 'no'
+        default: this.monitoring ? this.monitoring : 'no'
     }];
 
     this.prompt(prompts).then((props) => {
@@ -245,6 +278,9 @@ function askForMonitoring() {
     });
 }
 
+/**
+ * Ask For Console Options
+ */
 function askForConsoleOptions() {
     if (this.regenerate) return;
 
@@ -276,6 +312,9 @@ function askForConsoleOptions() {
     });
 }
 
+/**
+ * Ask For Service Discovery
+ */
 function askForServiceDiscovery() {
     if (this.regenerate) return;
 
@@ -284,7 +323,10 @@ function askForServiceDiscovery() {
     const serviceDiscoveryEnabledApps = [];
     this.appConfigs.forEach((appConfig, index) => {
         if (appConfig.serviceDiscoveryType) {
-            serviceDiscoveryEnabledApps.push({ baseName: appConfig.baseName, serviceDiscoveryType: appConfig.serviceDiscoveryType });
+            serviceDiscoveryEnabledApps.push({
+                baseName: appConfig.baseName,
+                serviceDiscoveryType: appConfig.serviceDiscoveryType
+            });
         }
     });
 
@@ -337,6 +379,9 @@ function askForServiceDiscovery() {
     }
 }
 
+/**
+ * Ask For Admin Password
+ */
 function askForAdminPassword() {
     if (this.regenerate || this.serviceDiscoveryType !== 'eureka') return;
 
@@ -357,6 +402,12 @@ function askForAdminPassword() {
     });
 }
 
+/**
+ * Get App Folders
+ * @param input path to join to destination path
+ * @param composeApplicationType type of application being composed
+ * @returns {Array} array of string representing app folders
+ */
 function getAppFolders(input, composeApplicationType) {
     const destinationPath = this.destinationPath(input);
     const files = shelljs.ls('-l', destinationPath);
@@ -386,6 +437,9 @@ function getAppFolders(input, composeApplicationType) {
     return appsFolders;
 }
 
+/**
+ * Ask For Docker Repository Name
+ */
 function askForDockerRepositoryName() {
     const done = this.async();
 
@@ -402,6 +456,9 @@ function askForDockerRepositoryName() {
     });
 }
 
+/**
+ * Ask For Docker Push Command
+ */
 function askForDockerPushCommand() {
     const done = this.async();
 

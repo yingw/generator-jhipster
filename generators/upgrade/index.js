@@ -1,7 +1,7 @@
 /**
- * Copyright 2013-2017 the original author or authors from the JHipster project.
+ * Copyright 2013-2018 the original author or authors from the JHipster project.
  *
- * This file is part of the JHipster project, see http://www.jhipster.tech/
+ * This file is part of the JHipster project, see https://www.jhipster.tech/
  * for more information.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -18,10 +18,13 @@
  */
 
 const chalk = require('chalk');
-const BaseGenerator = require('../generator-base');
 const shelljs = require('shelljs');
 const semver = require('semver');
+const fs = require('fs');
+const gitignore = require('parse-gitignore');
+const BaseGenerator = require('../generator-base');
 const constants = require('../generator-constants');
+const statistics = require('../statistics');
 
 /* Constants used throughout */
 const GENERATOR_JHIPSTER = 'generator-jhipster';
@@ -34,22 +37,55 @@ module.exports = class extends BaseGenerator {
     constructor(args, opts) {
         super(args, opts);
         this.force = this.options.force;
+        // This adds support for a `--from-cli` flag
+        this.option('from-cli', {
+            desc: 'Indicates the command is run from JHipster CLI',
+            type: Boolean,
+            defaults: false
+        });
+        // This adds support for a `--target-version` flag
+        this.option('target-version', {
+            desc: 'Upgrade to a specific version instead of the latest',
+            type: String
+        });
+
+        // This adds support for a `--skip-install` flag
+        this.option('skip-install', {
+            desc: 'Skips installing dependencies during the upgrade process',
+            type: Boolean,
+            defaults: false
+        });
+
+        // This adds support for a `--silent` flag
+        this.option('silent', {
+            desc: 'Hides output of the generation process',
+            type: Boolean,
+            defaults: false
+        });
+
+        this.targetVersion = this.options['target-version'];
+        this.skipInstall = this.options['skip-install'];
+        this.silent = this.options.silent;
     }
 
     get initializing() {
         return {
+            validateFromCli() {
+                if (!this.options['from-cli']) {
+                    this.warning(`Deprecated: JHipster seems to be invoked using Yeoman command. Please use the JHipster CLI. Run ${chalk.red('jhipster <command>')} instead of ${chalk.red('yo jhipster:<command>')}`);
+                }
+            },
+
             displayLogo() {
                 this.log(chalk.green('Welcome to the JHipster Upgrade Sub-Generator'));
                 this.log(chalk.green('This will upgrade your current application codebase to the latest JHipster version'));
             },
 
             loadConfig() {
+                this.config = this.getAllJhipsterConfig(this, true);
                 this.currentVersion = this.config.get('jhipsterVersion');
                 this.clientPackageManager = this.config.get('clientPackageManager');
                 this.clientFramework = this.config.get('clientFramework');
-                this.skipInstall = this.options['skip-install'];
-                this.silent = this.options.silent;
-                this.targetVersion = this.options['target-version'];
             }
         };
     }
@@ -63,9 +99,10 @@ module.exports = class extends BaseGenerator {
     }
 
     _cleanUp() {
-        const filesToKeep = ['.yo-rc.json', '.jhipster', 'node_modules', '.git', '.idea', '.mvn'];
+        const ignoredFiles = gitignore(fs.readFileSync('.gitignore'));
+        const filesToKeep = ['.yo-rc.json', '.jhipster', 'node_modules', '.git', '.idea', '.mvn', ...ignoredFiles];
         shelljs.ls('-A').forEach((file) => {
-            if (filesToKeep.indexOf(file) === -1) {
+            if (!filesToKeep.includes(file)) {
                 this.info(`Removing ${file}`);
                 shelljs.rm('-rf', file);
             }
@@ -78,9 +115,9 @@ module.exports = class extends BaseGenerator {
         let generatorCommand = 'yo jhipster';
         if (semver.gte(version, FIRST_CLI_SUPPORTED_VERSION)) {
             const generatorDir = this.clientPackageManager === 'yarn' ? shelljs.exec('yarn bin', { silent: this.silent }).stdout : shelljs.exec('npm bin', { silent: this.silent }).stdout;
-            generatorCommand = `${generatorDir.replace('\n', '')}/jhipster`;
+            generatorCommand = `"${generatorDir.replace('\n', '')}/jhipster"`;
         }
-        const regenerateCmd = `${generatorCommand} --with-entities --force --skip-install`;
+        const regenerateCmd = `${generatorCommand} --with-entities --force --skip-install --no-insight`;
         this.info(regenerateCmd);
         shelljs.exec(regenerateCmd, { silent: this.silent }, (code, msg, err) => {
             if (code === 0) this.success(`Successfully regenerated application with JHipster ${version}`);
@@ -91,7 +128,7 @@ module.exports = class extends BaseGenerator {
 
     _gitCommitAll(commitMsg, callback) {
         const commit = () => {
-            this.gitExec(['commit', '-q', '-m', `"${commitMsg}"`, '-a', '--allow-empty'], { silent: this.silent }, (code, msg, err) => {
+            this.gitExec(['commit', '-q', '-m', `"${commitMsg}"`, '-a', '--allow-empty', '--no-verify'], { silent: this.silent }, (code, msg, err) => {
                 if (code !== 0) this.error(`Unable to commit in git:\n${err}`);
                 this.success(`Committed with message "${commitMsg}"`);
                 callback();
@@ -105,14 +142,7 @@ module.exports = class extends BaseGenerator {
 
     _regenerate(version, callback) {
         this._generate(version, () => {
-            if (this.clientFramework === 'angular1' && version === this.latestVersion) {
-                this.info('bower install');
-                const result = this.spawnCommandSync('bower', ['install']);
-                if (result.status !== 0) {
-                    this.error('bower install failed.');
-                }
-            }
-            const keystore = `${SERVER_MAIN_RES_DIR}keystore.jks`;
+            const keystore = `${SERVER_MAIN_RES_DIR}config/tls/keystore.p12`;
             this.info(`Removing ${keystore}`);
             shelljs.rm('-Rf', keystore);
             this._gitCommitAll(`Generated with JHipster ${version}`, () => {
@@ -123,6 +153,15 @@ module.exports = class extends BaseGenerator {
 
     get configuring() {
         return {
+
+            assertJHipsterProject() {
+                const done = this.async();
+                if (!this.config.baseName) {
+                    this.error('Current directory does not contain a JHipster project.');
+                }
+                done();
+            },
+
             assertGitPresent() {
                 const done = this.async();
                 this.isGitInstalled((code) => {
@@ -182,8 +221,8 @@ module.exports = class extends BaseGenerator {
                 this.gitExec(['status', '--porcelain'], { silent: this.silent }, (code, msg, err) => {
                     if (code !== 0) this.error(`Unable to check for local changes:\n${msg} ${err}`);
                     if (msg) {
-                        this.warning(' local changes found.\n' +
-                            '\tPlease commit/stash them before upgrading');
+                        this.warning(' local changes found.\n'
+                            + '\tPlease commit/stash them before upgrading');
                         this.error('Exiting process');
                     }
                     done();
@@ -269,8 +308,7 @@ module.exports = class extends BaseGenerator {
     get default() {
         return {
             insight() {
-                const insight = this.insight();
-                insight.trackWithEvent('generator', 'upgrade');
+                statistics.sendSubGenEvent('generator', 'upgrade');
             },
 
             checkoutUpgradeBranch() {
@@ -338,18 +376,11 @@ module.exports = class extends BaseGenerator {
                 if (code !== 0) {
                     this.error(`${installCommand} failed.`);
                 }
-                if (this.clientFramework === 'angular1') {
-                    this.info('bower install');
-                    this.spawnCommandSync('bower', ['install']);
-                }
                 done();
             });
         } else {
-            if (this.clientFramework !== 'angular1') {
-                const logMsg =
-                    `Start your Webpack development server with:\n${chalk.yellow.bold(`${this.clientPackageManager} start`)}\n`;
-                this.success(logMsg);
-            }
+            const logMsg = `Start your Webpack development server with:\n${chalk.yellow.bold(`${this.clientPackageManager} start`)}\n`;
+            this.success(logMsg);
             done();
         }
     }

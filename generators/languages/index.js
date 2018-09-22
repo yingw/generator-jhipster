@@ -1,7 +1,7 @@
 /**
- * Copyright 2013-2017 the original author or authors from the JHipster project.
+ * Copyright 2013-2018 the original author or authors from the JHipster project.
  *
- * This file is part of the JHipster project, see http://www.jhipster.tech/
+ * This file is part of the JHipster project, see https://www.jhipster.tech/
  * for more information.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -19,6 +19,7 @@
 const chalk = require('chalk');
 const _ = require('lodash');
 const BaseGenerator = require('../generator-base');
+const statistics = require('../statistics');
 
 const constants = require('../generator-constants');
 
@@ -29,7 +30,12 @@ module.exports = class extends BaseGenerator {
         super(args, opts);
 
         configOptions = this.options.configOptions || {};
-
+        // This adds support for a `--from-cli` flag
+        this.option('from-cli', {
+            desc: 'Indicates the command is run from JHipster CLI',
+            type: Boolean,
+            defaults: false
+        });
         // This makes it possible to pass `languages` by argument
         this.argument('languages', {
             type: Array,
@@ -60,8 +66,8 @@ module.exports = class extends BaseGenerator {
             this.languages.forEach((language) => {
                 if (!this.isSupportedLanguage(language)) {
                     this.log('\n');
-                    this.error(chalk.red(`Unsupported language "${language}" passed as argument to language generator.` +
-                        `\nSupported languages: ${_.map(
+                    this.error(chalk.red(`Unsupported language "${language}" passed as argument to language generator.`
+                        + `\nSupported languages: ${_.map(
                             this.getAllSupportedLanguageOptions(),
                             o => `\n  ${_.padEnd(o.value, 5)} (${o.name})`
                         ).join('')}`));
@@ -71,6 +77,10 @@ module.exports = class extends BaseGenerator {
     }
 
     initializing() {
+        if (!this.options['from-cli']) {
+            this.warning(`Deprecated: JHipster seems to be invoked using Yeoman command. Please use the JHipster CLI. Run ${chalk.red('jhipster <command>')} instead of ${chalk.red('yo jhipster:<command>')}`);
+        }
+
         if (this.languages) {
             if (this.skipClient) {
                 this.log(chalk.bold(`\nInstalling languages: ${this.languages.join(', ')} for server`));
@@ -92,9 +102,9 @@ module.exports = class extends BaseGenerator {
         this.messageBroker = this.config.get('messageBroker') === 'no' ? false : this.config.get('messageBroker');
         this.env.options.appPath = this.config.get('appPath') || constants.CLIENT_MAIN_SRC_DIR;
         this.enableTranslation = this.config.get('enableTranslation');
-        this.enableSocialSignIn = this.config.get('enableSocialSignIn');
         this.currentLanguages = this.config.get('languages');
         this.clientFramework = this.config.get('clientFramework');
+        this.serviceDiscoveryType = this.config.get('serviceDiscoveryType') === 'no' ? false : this.config.get('serviceDiscoveryType');
         // Make dist dir available in templates
         if (this.config.get('buildTool') === 'maven') {
             this.BUILD_DIR = 'target/';
@@ -125,11 +135,21 @@ module.exports = class extends BaseGenerator {
         }
     }
 
+    get configuring() {
+        return {
+            saveConfig() {
+                if (this.enableTranslation) {
+                    this.languages = _.union(this.currentLanguages, this.languagesToApply);
+                    this.config.set('languages', this.languages);
+                }
+            }
+        };
+    }
+
     get default() {
         return {
             insight() {
-                const insight = this.insight();
-                insight.trackWithEvent('generator', 'languages');
+                statistics.sendSubGenEvent('generator', 'languages');
             },
 
             getSharedConfigOptions() {
@@ -157,9 +177,6 @@ module.exports = class extends BaseGenerator {
                 if (configOptions.nativeLanguage) {
                     this.nativeLanguage = configOptions.nativeLanguage;
                 }
-                if (configOptions.enableSocialSignIn !== undefined) {
-                    this.enableSocialSignIn = configOptions.enableSocialSignIn;
-                }
                 if (configOptions.skipClient) {
                     this.skipClient = configOptions.skipClient;
                 }
@@ -169,18 +186,11 @@ module.exports = class extends BaseGenerator {
                 if (configOptions.clientFramework) {
                     this.clientFramework = configOptions.clientFramework;
                 }
-            },
-
-            saveConfig() {
-                if (this.enableTranslation) {
-                    this.config.set('languages', _.union(this.currentLanguages, this.languagesToApply));
-                }
             }
         };
     }
 
     writing() {
-        const insight = this.insight();
         this.languagesToApply.forEach((language) => {
             if (!this.skipClient) {
                 this.installI18nClientFilesByLanguage(this, constants.CLIENT_MAIN_SRC_DIR, language);
@@ -188,15 +198,17 @@ module.exports = class extends BaseGenerator {
             if (!this.skipServer) {
                 this.installI18nServerFilesByLanguage(this, constants.SERVER_MAIN_RES_DIR, language);
             }
-            insight.track('languages/language', language);
+            statistics.sendSubGenEvent('languages/language', language);
         });
         if (!this.skipClient) {
-            this.updateLanguagesInLanguagePipe(this.config.get('languages'));
-            if (this.clientFramework === 'angular1') {
-                this.updateLanguagesInLanguageConstant(this.config.get('languages'));
-            } else {
-                this.updateLanguagesInLanguageConstantNG2(this.config.get('languages'));
-                this.updateLanguagesInWebpack(this.config.get('languages'));
+            this.updateLanguagesInLanguagePipe(this.languages);
+            this.updateLanguagesInLanguageConstantNG2(this.languages);
+            this.updateLanguagesInWebpack(this.languages);
+            if (this.clientFramework === 'angularX') {
+                this.updateLanguagesInMomentWebpackNgx(this.languages);
+            }
+            if (this.clientFramework === 'react') {
+                this.updateLanguagesInMomentWebpackReact(this.languages);
             }
         }
     }

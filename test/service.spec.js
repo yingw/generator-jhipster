@@ -11,7 +11,7 @@ const SERVER_MAIN_SRC_DIR = constants.SERVER_MAIN_SRC_DIR;
 describe('JHipster generator service', () => {
     describe('creates service without interface', () => {
         beforeEach((done) => {
-            helpers.run(require.resolve('../generators/service'))
+            helpers.run(require.resolve('../generators/spring-service'))
                 .inTmpDir((dir) => {
                     fse.copySync(path.join(__dirname, '../test/templates/default'), dir);
                 })
@@ -37,7 +37,7 @@ describe('JHipster generator service', () => {
 
     describe('creates service with interface', () => {
         beforeEach((done) => {
-            helpers.run(require.resolve('../generators/service'))
+            helpers.run(require.resolve('../generators/spring-service'))
                 .inTmpDir((dir) => {
                     fse.copySync(path.join(__dirname, '../test/templates/default'), dir);
                 })
@@ -45,6 +45,25 @@ describe('JHipster generator service', () => {
                 .withPrompts({
                     useInterface: true
                 })
+                .on('end', done);
+        });
+
+        it('creates service file', () => {
+            assert.file([
+                `${SERVER_MAIN_SRC_DIR}com/mycompany/myapp/service/FooService.java`,
+                `${SERVER_MAIN_SRC_DIR}com/mycompany/myapp/service/impl/FooServiceImpl.java`
+            ]);
+        });
+    });
+
+    describe('creates service with --default flag', () => {
+        beforeEach((done) => {
+            helpers.run(require.resolve('../generators/spring-service'))
+                .inTmpDir((dir) => {
+                    fse.copySync(path.join(__dirname, '../test/templates/default'), dir);
+                })
+                .withArguments(['foo'])
+                .withOptions({ default: true })
                 .on('end', done);
         });
 

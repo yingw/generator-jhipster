@@ -1,7 +1,7 @@
 /**
- * Copyright 2013-2017 the original author or authors from the JHipster project.
+ * Copyright 2013-2018 the original author or authors from the JHipster project.
  *
- * This file is part of the JHipster project, see http://www.jhipster.tech/
+ * This file is part of the JHipster project, see https://www.jhipster.tech/
  * for more information.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -20,8 +20,13 @@
 const chalk = require('chalk');
 const didYouMean = require('didyoumean');
 const meow = require('meow');
+const yeoman = require('yeoman-environment');
+const _ = require('lodash');
+
+const SUB_GENERATORS = require('./commands');
 
 const CLI_NAME = 'jhipster';
+const GENERATOR_NAME = 'generator-jhipster';
 const debug = function (msg) {
     if (this.debugEnabled) {
         console.log(`${chalk.blue('DEBUG!')}  ${msg}`);
@@ -36,18 +41,22 @@ const log = function (msg) {
     console.log(msg);
 };
 
-const error = function (msg) {
+const error = function (msg, trace) {
     console.error(`${chalk.red.bold('ERROR!')} ${chalk.red(msg)}`);
+    if (trace) {
+        console.log(trace);
+    }
+    process.exit(1);
 };
 
 const init = function (program) {
     program.option('-d, --debug', 'enable debugger');
 
     const argv = program.normalize(process.argv);
-    this.debugEnabled = program.debug = argv.indexOf('-d') > -1 || argv.indexOf('--debug') > -1; // Need this early
+    this.debugEnabled = program.debug = argv.includes('-d') || argv.includes('--debug'); // Need this early
 
     if (this.debugEnabled) {
-        debug('Debug logging is on');
+        info('Debug logging is on');
     }
 };
 
@@ -74,7 +83,7 @@ const toString = (item) => {
 const initHelp = (program, cliName) => {
     program.on('--help', () => {
         logger.debug('Adding additional help info');
-        logger.info(`  For more info visit ${chalk.blue('http://www.jhipster.tech')}`);
+        logger.info(`  For more info visit ${chalk.blue('https://www.jhipster.tech')}`);
         logger.info('');
     });
 
@@ -118,6 +127,20 @@ const getOptionsFromArgs = (args) => {
     return options;
 };
 
+/* Convert option objects to commandline args */
+const getOptionAsArgs = (options, withEntities) => {
+    const args = Object.entries(options).map(([key, value]) => {
+        if (value === true) {
+            return `--${_.kebabCase(key)}`;
+        }
+        return value ? `--${_.kebabCase(key)} ${value}` : '';
+    });
+    if (withEntities) args.push('--with-entities');
+    args.push('--from-cli');
+    logger.debug(`converted options: ${args}`);
+    return _.uniq(args.join(' ').split(' '));
+};
+
 /**
  *  Get options for the command
  */
@@ -139,6 +162,7 @@ const getCommandOptions = (pkg, argv) => {
     const options = meow({ help: false, pkg, argv });
     const flags = options ? options.flags : null;
     if (flags) {
+        flags['from-cli'] = true;
         // Add un-camelized options too, for legacy
         Object.keys(flags).forEach((key) => {
             const legacyKey = key.replace(/[A-Z]/g, m => `-${m.toLowerCase()}`);
@@ -146,16 +170,33 @@ const getCommandOptions = (pkg, argv) => {
         });
         return flags;
     }
-    return {};
+    return { 'from-cli': true };
+};
+
+const done = () => {
+    logger.info(chalk.green.bold('Congratulations, JHipster execution is complete!'));
+};
+
+const createYeomanEnv = () => {
+    const env = yeoman.createEnv();
+    /* Register yeoman generators */
+    Object.keys(SUB_GENERATORS).forEach((generator) => {
+        env.register(require.resolve(`../generators/${generator}`), `${CLI_NAME}:${generator}`);
+    });
+    return env;
 };
 
 module.exports = {
     CLI_NAME,
+    GENERATOR_NAME,
     toString,
     logger,
     initHelp,
     getArgs,
     getOptionsFromArgs,
     getCommand,
-    getCommandOptions
+    getCommandOptions,
+    done,
+    createYeomanEnv,
+    getOptionAsArgs
 };

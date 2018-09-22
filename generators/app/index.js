@@ -1,7 +1,7 @@
 /**
- * Copyright 2013-2017 the original author or authors from the JHipster project.
+ * Copyright 2013-2018 the original author or authors from the JHipster project.
  *
- * This file is part of the JHipster project, see http://www.jhipster.tech/
+ * This file is part of the JHipster project, see https://www.jhipster.tech/
  * for more information.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -17,17 +17,24 @@
  * limitations under the License.
  */
 const chalk = require('chalk');
+const _ = require('lodash');
 const BaseGenerator = require('../generator-base');
 const cleanup = require('../cleanup');
 const prompts = require('./prompts');
 const packagejs = require('../../package.json');
-const constants = require('../generator-constants');
+const statistics = require('../statistics');
 
 module.exports = class extends BaseGenerator {
     constructor(args, opts) {
         super(args, opts);
 
         this.configOptions = {};
+        // This adds support for a `--from-cli` flag
+        this.option('from-cli', {
+            desc: 'Indicates the command is run from JHipster CLI',
+            type: Boolean,
+            defaults: false
+        });
         // This adds support for a `--skip-client` flag
         this.option('skip-client', {
             desc: 'Skip the client-side application generation',
@@ -42,9 +49,30 @@ module.exports = class extends BaseGenerator {
             defaults: false
         });
 
+        // This adds support for a `--skip-git` flag
+        this.option('skip-git', {
+            desc: 'Skip the git initialization',
+            type: Boolean,
+            defaults: false
+        });
+
+        // This adds support for a `--skip-commit-hook` flag
+        this.option('skip-commit-hook', {
+            desc: 'Skip adding husky commit hooks',
+            type: Boolean,
+            defaults: false
+        });
+
         // This adds support for a `--skip-user-management` flag
         this.option('skip-user-management', {
             desc: 'Skip the user management module during app generation',
+            type: Boolean,
+            defaults: false
+        });
+
+        // This adds support for a `--skip-check-length-of-identifier` flag
+        this.option('skip-check-length-of-identifier', {
+            desc: 'Skip check the length of the identifier, only for recent Oracle databases that support 30+ characters metadata',
             type: Boolean,
             defaults: false
         });
@@ -77,9 +105,9 @@ module.exports = class extends BaseGenerator {
             defaults: 'jhi'
         });
 
-        // This adds support for a `--npm` flag
-        this.option('npm', {
-            desc: 'Use npm instead of yarn',
+        // This adds support for a `--yarn` flag
+        this.option('yarn', {
+            desc: 'Use yarn instead of npm',
             type: Boolean,
             defaults: false
         });
@@ -96,45 +124,71 @@ module.exports = class extends BaseGenerator {
             type: String
         });
 
-        this.currentQuestion = 0;
-        this.totalQuestions = constants.QUESTIONS;
+        // This adds support for a `--blueprint` flag which can be used to specify a blueprint to use for generation
+        this.option('blueprint', {
+            desc: '[BETA] Specify a generator blueprint to use for the sub generators',
+            type: String
+        });
+
+        // This adds support for a `--experimental` flag which can be used to enable experimental features
+        this.option('experimental', {
+            desc: 'Enable experimental features. Please note that these features may be unstable and may undergo breaking changes at any time',
+            type: Boolean,
+            defaults: false
+        });
+
         this.skipClient = this.configOptions.skipClient = this.options['skip-client'] || this.config.get('skipClient');
         this.skipServer = this.configOptions.skipServer = this.options['skip-server'] || this.config.get('skipServer');
         this.skipUserManagement = this.configOptions.skipUserManagement = this.options['skip-user-management'] || this.config.get('skipUserManagement');
-        this.jhiPrefix = this.configOptions.jhiPrefix || this.config.get('jhiPrefix') || this.options['jhi-prefix'];
+        this.skipCheckLengthOfIdentifier = this.configOptions.skipCheckLengthOfIdentifier = this.options['skip-check-length-of-identifier'] || this.config.get('skipCheckLengthOfIdentifier');
+        this.jhiPrefix = this.configOptions.jhiPrefix = _.camelCase(this.config.get('jhiPrefix') || this.options['jhi-prefix']);
         this.withEntities = this.options['with-entities'];
         this.skipChecks = this.options['skip-checks'];
-        this.useYarn = this.configOptions.useYarn = !this.options.npm;
+        const blueprint = this.normalizeBlueprintName(this.options.blueprint || this.config.get('blueprint'));
+        this.blueprint = this.configOptions.blueprint = blueprint;
+        this.useNpm = this.configOptions.useNpm = !this.options.yarn;
+        this.useYarn = !this.useNpm;
+
         this.isDebugEnabled = this.configOptions.isDebugEnabled = this.options.debug;
+        this.experimental = this.configOptions.experimental = this.options.experimental;
+        this.registerClientTransforms();
     }
 
     get initializing() {
         return {
+            validateFromCli() {
+                if (!this.options['from-cli']) {
+                    this.warning(`Deprecated: JHipster seems to be invoked using Yeoman command. Please use the JHipster CLI. Run ${chalk.red('jhipster <command>')} instead of ${chalk.red('yo jhipster:<command>')}`);
+                }
+            },
+
             displayLogo() {
                 this.printJHipsterLogo();
             },
 
-            checkJava() {
+            validateBlueprint() {
+                if (this.blueprint) {
+                    this.checkBlueprint(this.blueprint);
+                }
+            },
+
+            validateJava() {
                 this.checkJava();
             },
 
-            checkNode() {
+            validateNode() {
                 this.checkNode();
             },
 
-            checkGit() {
+            validateGit() {
                 this.checkGit();
             },
 
-            checkGitConnection() {
-                this.checkGitConnection();
-            },
-
-            checkYarn() {
+            validateYarn() {
                 this.checkYarn();
             },
 
-            checkForNewVersion() {
+            checkForNewJHVersion() {
                 if (!this.skipChecks) {
                     this.checkForNewVersion();
                 }
@@ -171,10 +225,10 @@ module.exports = class extends BaseGenerator {
                 }
                 this.clientPackageManager = this.config.get('clientPackageManager');
                 if (!this.clientPackageManager) {
-                    if (this.useYarn) {
-                        this.clientPackageManager = 'yarn';
-                    } else {
+                    if (this.useNpm) {
                         this.clientPackageManager = 'npm';
+                    } else {
+                        this.clientPackageManager = 'yarn';
                     }
                 }
             }
@@ -184,6 +238,8 @@ module.exports = class extends BaseGenerator {
     get prompting() {
         return {
             askForInsightOptIn: prompts.askForInsightOptIn,
+            // TODO : enable this. It's a bit messy for now, it need better sync.
+            // askForAccountLinking: prompts.askForAccountLinking,
             askForApplicationType: prompts.askForApplicationType,
             askForModuleName: prompts.askForModuleName
         };
@@ -196,8 +252,12 @@ module.exports = class extends BaseGenerator {
                 this.configOptions.baseName = this.baseName;
                 this.configOptions.logo = false;
                 this.configOptions.otherModules = this.otherModules;
-                this.configOptions.lastQuestion = this.currentQuestion;
                 this.generatorType = 'app';
+                if (this.reactive) {
+                    // TODO: support client in reactive app
+                    this.skipClient = true;
+                    this.generatorType = 'server';
+                }
                 if (this.applicationType === 'microservice') {
                     this.skipClient = true;
                     this.generatorType = 'server';
@@ -221,15 +281,23 @@ module.exports = class extends BaseGenerator {
                     this.configOptions.devDatabaseType = this.options.db;
                     this.configOptions.prodDatabaseType = this.options.db;
                     this.configOptions.authenticationType = this.options.auth;
+                    this.configOptions.uaaBaseName = this.options.uaaBaseName;
                 }
                 this.configOptions.clientPackageManager = this.clientPackageManager;
             },
+
+            // composeAccountLinking() {
+            //     if (!this.linkAccount) return;
+
+            //     this.composeWith(require.resolve('../link-account'));
+            // },
 
             composeServer() {
                 if (this.skipServer) return;
 
                 this.composeWith(require.resolve('../server'), {
                     'client-hook': !this.skipClient,
+                    'from-cli': this.options['from-cli'],
                     configOptions: this.configOptions,
                     force: this.options.force,
                     debug: this.isDebugEnabled
@@ -241,6 +309,8 @@ module.exports = class extends BaseGenerator {
 
                 this.composeWith(require.resolve('../client'), {
                     'skip-install': this.options['skip-install'],
+                    'skip-commit-hook': this.options['skip-commit-hook'],
+                    'from-cli': this.options['from-cli'],
                     configOptions: this.configOptions,
                     force: this.options.force,
                     debug: this.isDebugEnabled
@@ -258,22 +328,11 @@ module.exports = class extends BaseGenerator {
             askForMoreModules: prompts.askForMoreModules,
 
             setSharedConfigOptions() {
-                this.configOptions.lastQuestion = this.currentQuestion;
-                this.configOptions.totalQuestions = this.totalQuestions;
                 this.configOptions.testFrameworks = this.testFrameworks;
                 this.configOptions.enableTranslation = this.enableTranslation;
                 this.configOptions.nativeLanguage = this.nativeLanguage;
                 this.configOptions.languages = this.languages;
                 this.configOptions.clientPackageManager = this.clientPackageManager;
-            },
-
-            insight() {
-                const insight = this.insight();
-                insight.trackWithEvent('generator', 'app');
-                insight.track('app/applicationType', this.applicationType);
-                insight.track('app/testFrameworks', this.testFrameworks);
-                insight.track('app/otherModules', this.otherModules);
-                insight.track('app/clientPackageManager', this.clientPackageManager);
             },
 
             composeLanguages() {
@@ -282,21 +341,42 @@ module.exports = class extends BaseGenerator {
             },
 
             saveConfig() {
-                this.config.set('jhipsterVersion', packagejs.version);
-                this.config.set('applicationType', this.applicationType);
-                this.config.set('baseName', this.baseName);
-                this.config.set('testFrameworks', this.testFrameworks);
-                this.config.set('jhiPrefix', this.jhiPrefix);
-                this.config.set('otherModules', this.otherModules);
-                if (this.skipClient) this.config.set('skipClient', true);
-                if (this.skipServer) this.config.set('skipServer', true);
-                if (this.skipUserManagement) this.config.set('skipUserManagement', true);
-                this.config.set('enableTranslation', this.enableTranslation);
+                const config = {
+                    jhipsterVersion: packagejs.version,
+                    applicationType: this.applicationType,
+                    baseName: this.baseName,
+                    testFrameworks: this.testFrameworks,
+                    jhiPrefix: this.jhiPrefix,
+                    skipCheckLengthOfIdentifier: this.skipCheckLengthOfIdentifier,
+                    otherModules: this.otherModules,
+                    enableTranslation: this.enableTranslation,
+                    clientPackageManager: this.clientPackageManager
+                };
                 if (this.enableTranslation) {
-                    this.config.set('nativeLanguage', this.nativeLanguage);
-                    this.config.set('languages', this.languages);
+                    config.nativeLanguage = this.nativeLanguage;
+                    config.languages = this.languages;
                 }
-                this.config.set('clientPackageManager', this.clientPackageManager);
+                this.blueprint && (config.blueprint = this.blueprint);
+                this.reactive && (config.reactive = this.reactive);
+                this.skipClient && (config.skipClient = true);
+                this.skipServer && (config.skipServer = true);
+                this.skipUserManagement && (config.skipUserManagement = true);
+                this.config.set(config);
+            },
+
+            insight() {
+                const yorc = {
+                    ..._.omit(this.configOptions, [
+                        'jhiPrefix',
+                        'baseName',
+                        'jwtSecretKey',
+                        'packageName',
+                        'packagefolder',
+                        'rememberMeKey'
+                    ])
+                };
+                yorc.applicationType = this.applicationType;
+                statistics.sendYoRc(yorc, this.existingProject, this.jhipsterVersion);
             }
         };
     }
@@ -304,7 +384,7 @@ module.exports = class extends BaseGenerator {
     get writing() {
         return {
             cleanup() {
-                cleanup.cleanupOldFiles(this, this.javaDir, this.testDir);
+                cleanup.cleanupOldFiles(this);
             },
 
             regenerateEntities() {
@@ -313,11 +393,24 @@ module.exports = class extends BaseGenerator {
                         this.composeWith(require.resolve('../entity'), {
                             regenerate: true,
                             'skip-install': true,
+                            'from-cli': this.options['from-cli'],
                             force: this.options.force,
                             debug: this.isDebugEnabled,
                             arguments: [entity.name]
                         });
                     });
+                }
+            },
+
+            generatePackageForMS() {
+                if (this.skipClient) {
+                    if (this.otherModules === undefined) {
+                        this.otherModules = [];
+                    }
+                    // Generate a package.json file containing the current version
+                    // of the generator as dependency
+                    this.dasherizedBaseName = _.kebabCase(this.baseName);
+                    this.template('skipClientApp.package.json.ejs', 'package.json');
                 }
             }
         };
@@ -327,13 +420,6 @@ module.exports = class extends BaseGenerator {
         return {
             localInstall() {
                 if (this.skipClient) {
-                    if (this.otherModules === undefined) {
-                        this.otherModules = [];
-                    }
-                    // Generate a package.json file containing the current version
-                    // of the generator as dependency
-                    this.template('_skipClientApp.package.json', 'package.json');
-
                     if (!this.options['skip-install']) {
                         if (this.clientPackageManager === 'yarn') {
                             this.log(chalk.bold(`\nInstalling generator-jhipster@${this.jhipsterVersion} locally using yarn`));
@@ -343,6 +429,24 @@ module.exports = class extends BaseGenerator {
                             this.npmInstall();
                         }
                     }
+                }
+
+                if (!this.options['skip-git']) {
+                    this.isGitInstalled((code) => {
+                        if (code === 0) {
+                            this.gitExec('rev-parse --is-inside-work-tree', { trace: false }, (err, gitDir) => {
+                                if (!gitDir) {
+                                    this.gitExec('init', { trace: false }, () => {
+                                        this.gitExec('add -A', { trace: false }, () => {
+                                            this.gitExec(`commit -am "Initial application generated by JHipster-${this.jhipsterVersion}"`, { trace: false }, () => this.log(chalk.green.bold('Application successfully committed to Git.')));
+                                        });
+                                    });
+                                }
+                            });
+                        } else {
+                            this.warning('The generated application could not be added to Git, as Git is not installed on your system');
+                        }
+                    });
                 }
             },
 
@@ -361,6 +465,7 @@ module.exports = class extends BaseGenerator {
                     this.log(`\n${chalk.bold.red('Running post run module hooks failed. No modification done to the generated app.')}`);
                     this.debug('Error:', err);
                 }
+                this.log(chalk.green(`\nIf you find JHipster useful consider supporting our collective ${chalk.yellow('https://opencollective.com/generator-jhipster')}`));
             }
         };
     }

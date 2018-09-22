@@ -1,7 +1,7 @@
 /**
- * Copyright 2013-2017 the original author or authors from the JHipster project.
+ * Copyright 2013-2018 the original author or authors from the JHipster project.
  *
- * This file is part of the JHipster project, see http://www.jhipster.tech/
+ * This file is part of the JHipster project, see https://www.jhipster.tech/
  * for more information.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -23,6 +23,7 @@ const prompts = require('./prompts');
 const writeFiles = require('./files').writeFiles;
 const BaseGenerator = require('../generator-base');
 const docker = require('../docker-base');
+const statistics = require('../statistics');
 
 /* Constants used throughout */
 const constants = require('../generator-constants');
@@ -30,7 +31,12 @@ const constants = require('../generator-constants');
 module.exports = class extends BaseGenerator {
     constructor(args, opts) {
         super(args, opts);
-
+        // This adds support for a `--from-cli` flag
+        this.option('from-cli', {
+            desc: 'Indicates the command is run from JHipster CLI',
+            type: Boolean,
+            defaults: false
+        });
         // This adds support for a `--skip-checks` flag
         this.option('skip-checks', {
             desc: 'Check the status of the required tools',
@@ -43,6 +49,12 @@ module.exports = class extends BaseGenerator {
 
     get initializing() {
         return {
+            validateFromCli() {
+                if (!this.options['from-cli']) {
+                    this.warning(`Deprecated: JHipster seems to be invoked using Yeoman command. Please use the JHipster CLI. Run ${chalk.red('jhipster <command>')} instead of ${chalk.red('yo jhipster:<command>')}`);
+                }
+            },
+
             sayHello() {
                 this.log(chalk.white(`${chalk.bold('🐮')} [BETA] Welcome to the JHipster Rancher Compose Generator ${chalk.bold('🐮')}`));
                 this.log(chalk.white(`Files will be generated in folder: ${chalk.yellow(this.destinationRoot())}`));
@@ -69,6 +81,7 @@ module.exports = class extends BaseGenerator {
 
             loadConfig() {
                 this.defaultAppsFolders = this.config.get('appsFolders');
+                this.authenticationType = this.config.get('authenticationType');
                 this.directoryPath = this.config.get('directoryPath');
                 this.monitoring = this.config.get('monitoring');
                 this.useKafka = false;
@@ -106,8 +119,7 @@ module.exports = class extends BaseGenerator {
     get configuring() {
         return {
             insight() {
-                const insight = this.insight();
-                insight.trackWithEvent('generator', 'rancher-compose');
+                statistics.sendSubGenEvent('generator', 'rancher-compose');
             },
 
             checkImages: docker.checkImages,
@@ -197,6 +209,10 @@ module.exports = class extends BaseGenerator {
 
                         parentConfiguration[databaseServiceName] = databaseYamlConfig;
                     }
+
+                    // Expose authenticationType
+                    this.authenticationType = appConfig.authenticationType;
+
                     // Add search engine configuration
                     const searchEngine = appConfig.searchEngine;
                     if (searchEngine === 'elasticsearch') {
@@ -256,15 +272,17 @@ module.exports = class extends BaseGenerator {
             },
 
             saveConfig() {
-                this.config.set('appsFolders', this.appsFolders);
-                this.config.set('directoryPath', this.directoryPath);
-                this.config.set('monitoring', this.monitoring);
-                this.config.set('serviceDiscoveryType', this.serviceDiscoveryType);
-                this.config.set('adminPassword', this.adminPassword);
-                this.config.set('jwtSecretKey', this.jwtSecretKey);
-                this.config.set('dockerRepositoryName', this.dockerRepositoryName);
-                this.config.set('dockerPushCommand', this.dockerPushCommand);
-                this.config.set('enableRancherLoadBalancing', this.enableRancherLoadBalancing);
+                this.config.set({
+                    appsFolders: this.appsFolders,
+                    directoryPath: this.directoryPath,
+                    monitoring: this.monitoring,
+                    serviceDiscoveryType: this.serviceDiscoveryType,
+                    adminPassword: this.adminPassword,
+                    jwtSecretKey: this.jwtSecretKey,
+                    dockerRepositoryName: this.dockerRepositoryName,
+                    dockerPushCommand: this.dockerPushCommand,
+                    enableRancherLoadBalancing: this.enableRancherLoadBalancing
+                });
             }
         };
     }
